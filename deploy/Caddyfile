@@ -1,0 +1,26 @@
+# Public HTTPS front for the service. Replace 203.0.113.10 with your server's public IP (or use a domain).
+# Only /add, /search and /health reach the service; everything else is 404.
+{
+	admin localhost:2019
+	# clients do not send SNI for IP addresses
+	default_sni 203.0.113.10
+}
+
+https://203.0.113.10 {
+	tls {
+		issuer acme {
+			profile shortlived
+		}
+	}
+	request_body {
+		max_size 64MB
+	}
+	@api path /add /search /health
+	handle @api {
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle {
+		respond 404
+	}
+	log
+}

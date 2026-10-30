@@ -1,0 +1,10 @@
+# Versions deployed for the Cycle-2 evaluation (Python 3.10, Ubuntu 22.04).
+bm25s==0.3.11
+fastapi==0.162.0
+httpx==0.28.1
+numpy==2.2.6
+pydantic==2.14.1
+PyStemmer==3.1.0
+starlette==1.7.0
+tiktoken==0.14.0
+uvicorn==0.54.0

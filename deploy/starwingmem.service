@@ -1,0 +1,16 @@
+[Unit]
+Description=starwingMem AML Add/Search service
+After=network-online.target
+
+[Service]
+User=aml
+WorkingDirectory=/opt/starwingmem/app
+# /opt/starwingmem/env (mode 600) holds DASHSCOPE_API_KEY=... and AML_TOKEN=...
+EnvironmentFile=/opt/starwingmem/env
+Environment=AML_DB=/opt/starwingmem/data/mem.sqlite AML_CACHE=/opt/starwingmem/cache/emb.sqlite TIKTOKEN_CACHE_DIR=/opt/starwingmem/tiktoken
+ExecStart=/opt/starwingmem/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000 --log-level warning
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

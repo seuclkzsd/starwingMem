@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+service/data/
+service/cache/
+*.sqlite
+*.sqlite-*
+*.log
+.env
+venv/
+.venv/
