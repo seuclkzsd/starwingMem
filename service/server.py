@@ -32,9 +32,9 @@ from fastapi import Body, Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 
 # Embedding spend of the deployed service is tracked apart from local experiments (their cap is 30 yuan in
-# exp/cache/emb_usage.log); of the 100-yuan budget the official Smoke/Full runs may use up to 65 by default.
+# exp/cache/emb_usage.log). Official Smoke and Full runs may use up to 150 yuan by default (Full estimate: 87-139).
 os.environ.setdefault("AML_EMB_USAGE_LOG", str(Path(os.environ.get("AML_DB", Path(__file__).with_name("data") / "mem.sqlite")).with_name("emb_usage_server.log")))
-os.environ.setdefault("AML_EMB_BUDGET_YUAN", "65")
+os.environ.setdefault("AML_EMB_BUDGET_YUAN", "150")
 
 import codemem
 import dashscope

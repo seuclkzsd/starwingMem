@@ -222,6 +222,7 @@ def check(data, top_k, sent, o):
         else:
             assert len(c) == 1
             texts.append(c[0]["text"])
+            assert re.fullmatch(r'<past_conversation index="\d+">\n.+\n</past_conversation>', c[0]["text"], re.S), c[0]["text"][:80]
             kinds.append(0)
     assert kinds == sorted(kinds), "image items must come after all text items"
     joined = "\n".join(texts)
@@ -322,7 +323,7 @@ def multimodal(tmp):
     a_text = "\n".join(p["text"] for d in got[0] if not d["id"].startswith("img:") for p in d["content"])
     assert "corgi named Biscuit last spring" in a_text and f"[Image {sha(P1)[:8]}]" in a_text   # rows before the first image too
     assert "zebra" not in a_text and "Streaming online QA feedback" not in a_text                # stream feedback not indexed
-    assert re.match(r"\[\d{4}-\d\d-\d\d \(\w{3}\) \d\d:\d\d\]\n", got[0][0]["content"][0]["text"]), "mm headers keep HH:MM"
+    assert re.match(r'<past_conversation index="1">\n\[\d{4}-\d\d-\d\d \(\w{3}\) \d\d:\d\d\]\n', got[0][0]["content"][0]["text"]), "mm headers keep HH:MM"
     assert {sha(base64.b64decode(d["content"][1]["image_url"]["url"].split(",")[1])) for d in got[0][stats[0][0]:]} == sent["mA"]
     assert f"[Image {sha(P1)[:8]}]" in got[2][0]["content"][0]["text"], "exact query-image match ranks its turn first"
     assert stats[3][1] == D["img_max"], stats[3]                                                  # count cap

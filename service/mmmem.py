@@ -277,6 +277,9 @@ class MMUser(UserMem):
 
 # answer_tok: what text + images may cost a gpt-4o-mini reader in total. 117,760 input tokens (rules.txt:1609) minus
 # ~9.8k for the question, options, instructions and image labels; images only take what the returned text leaves.
+# Verbatim text in a label, so the reader takes it as a record of past conversations and not as a chat to continue.
+# gpt-4o-mini, local: MemLens 6 -> 9 of 36 correct with its own prompt, 0 -> 6 with the MobileMem one; MobileMem 8 -> 11 of 80.
+WINDOW = '<past_conversation index="{i}">\n{t}\n</past_conversation>'
 MM_DEFAULTS = {"max_passages": 100_000, "img_max": 12, "answer_tok": 108_000, "img_tok_budget": 10 ** 9,
                "img_byte_budget": 24 * 1024 * 1024, "cjk_bm25": True}
 
@@ -404,9 +407,9 @@ class MMStore(MemoryStore):
             _tls.qimgs = None
             self._unpin(u)
         top_k = int(req.get("top_k") or 100)
-        out = [{"id": d["id"], "content": [{"type": "text", "text": d["content"]}], "score": d["score"],
-                "created_at": d["created_at"]} for d in res["data"]]
-        text_tok = sum(ntok(d["content"]) + 8 for d in res["data"])
+        out = [{"id": d["id"], "content": [{"type": "text", "text": WINDOW.format(i=k, t=d["content"])}], "score": d["score"],
+                "created_at": d["created_at"]} for k, d in enumerate(res["data"], 1)]
+        text_tok = sum(ntok(d["content"][0]["text"]) + 8 for d in out)
         out += self._images(u, res["data"], order, max(0, top_k - len(out)), out[-1]["score"] if out else 1.0,
                             min(self.o["img_tok_budget"], self.o["answer_tok"] - text_tok))
         self._evict()
