@@ -1,10 +1,10 @@
 # starwingMem
 
-starwingMem is a long-term memory service for the Agent Memory Challenge 2026 (Cycle 2, Open-source Methods division), entered in the Textual, Coding and Multimodal tracks. It implements the AML Add / Search contract: Add stores what the platform sends, and Search returns verbatim history to the platform's fixed answer model, with dates resolved. **gpt-4o-mini: N/A.** No generative model is called at Add or Search time in any version (v1.0–v1.2). The only model is `text-embedding-v4`, on the textual and multimodal paths; the v1.1 coding path uses BM25 and rules only. Images are stored and returned as they are and are never interpreted.
+starwingMem is a long-term memory service for the Agent Memory Challenge 2026 (Cycle 2, Open-source Methods division), entered in the Textual, Coding and Multimodal tracks. It implements the AML Add / Search contract: Add stores what the platform sends, and Search returns verbatim history to the platform's fixed answer model, with dates resolved. **gpt-4o-mini: N/A.** No generative model is called at Add or Search time in any version (v1.0–v1.3). The only model is `text-embedding-v4`, on the textual and multimodal paths; the v1.1 coding path uses BM25 and rules only. Images are stored and returned as they are and are never interpreted.
 
 starwingMem 是为第二届 Agent 记忆挑战赛（开源方法榜）实现的记忆服务，参加文本、代码、多模态三个赛道。它只负责 Add / Search：原样保存平台写入的内容，检索时返回带日期标注的原始历史片段，最终答案由平台统一生成。
 
-本文描述 v1.2。各版本的差异见[版本记录](#版本记录)。
+本文描述 v1.3。各版本的差异见[版本记录](#版本记录)。
 
 ## 接口
 
@@ -101,16 +101,16 @@ starwingMem 是为第二届 Agent 记忆挑战赛（开源方法榜）实现的�
 | Search 时用 gpt-4o-mini 判断候选里有没有答案，没有就返回空 | MobileMem 拒答题 0/60 → 22/60，但 MemLens、MemEye 72%、64% 的题被判成没有 | 不用 |
 | gpt-4o-mini 重排代码卡片（99 个查询） | 第 1 张命中 0.626 → 0.646，2 题变好、0 题变差 | 不用 |
 | 文本返回 32k、64k（回答模型 gpt-4o-mini，LoCoMo、LME、BEAM 共 239 / 118 题） | 相对 16k：32k +0.1 点，64k +0.3 点，都不显著 | 用 16k |
-| 文本窗口也加 `<past_conversation>` 标签（同上 239 题） | +3.8 点，95% CI [0.0, +7.4]，校正 3 组比较后下界 −0.7，未过事先定的标准；Streaming 和另外 4 个数据集没有测 | 不用 |
+| 文本窗口也加 `<past_conversation>` 标签（同上 239 题） | +3.8 点，95% CI [0.0, +7.4]，BEAM +7.5、LME +3.7、LoCoMo 0；校正 3 组比较后下界 −0.7，Streaming 和另外 4 个数据集没有测 | 采用（v1.3） |
 | 多模态带图和不带图（MemLens 36 题，官方提示词加标签） | 答对 9 → 12，5 题变好、2 题变差，不显著 | 保留返回原图 |
 
 ## 模型使用（学术榜要求）
 
-本节适用于 v1.0、v1.0.1、v1.0.2、v1.0.3、v1.1 和 v1.2。
+本节适用于 v1.0–v1.3。
 
 | 组件 | 使用情况 |
 |---|---|
-| LLM（gpt-4o-mini） | **N/A**。Add/Search 全链路不调用生成式模型，适用 v1.0–v1.2。 |
+| LLM（gpt-4o-mini） | **N/A**。Add/Search 全链路不调用生成式模型，适用 v1.0–v1.3。 |
 | Reranker | **N/A**。不使用。 |
 | Embedding | `text-embedding-v4`，用于文本和多模态路径。v1.0–v1.0.3 没有代码路径，代码赛道的请求走文本路径，也用它。 |
 | 词法检索 | BM25：`bm25s` + `PyStemmer`。代码路径用同一个库，分词规则是自己写的。 |
@@ -129,7 +129,7 @@ starwingMem 是为第二届 Agent 记忆挑战赛（开源方法榜）实现的�
 
 ## 多模态处理声明
 
-| 项目 | v1.0、v1.0.1 | v1.0.3 | v1.1、v1.2 |
+| 项目 | v1.0、v1.0.1 | v1.0.3 | v1.1–v1.3 |
 |---|---|---|---|
 | 方式 | caption-only | caption-only | 检索只用文本和 caption，返回原图 |
 | 是否处理原图 | 否。含 base64 的原始请求随 Add 存入 SQLite，只为幂等和重启回放，不解码、不分析 | 同左 | 不解析内容。存原图，只读文件头取 MIME 和宽高，用来估算图片 token 和控制返回量，不解码像素 |
@@ -144,7 +144,7 @@ Multimodal declaration in English. v1.0 and v1.0.1 are caption-only and return s
 
 ## 原始工作与改动披露
 
-本节适用于 v1.0–v1.2。已绑定的 commit 里的 README 没有这些内容，以本节为准。
+本节适用于 v1.0–v1.3。已绑定的 commit 里的 README 没有这些内容，以本节为准。
 
 下面每个来源一张表，字段相同。所有来源都没有复制代码，方法由本团队用自己的代码实现。文本路径的会话级 RRF 和 v1.1 代码路径的两个参考作品实际部署；其余作品只以默认关闭的开关存在于 `memsys.Config`，部署关闭，未参与评测。
 
@@ -280,7 +280,7 @@ Multimodal declaration in English. v1.0 and v1.0.1 are caption-only and return s
 
 离线消融里的回答和评分替身：本地 Qwen3-14B；早期用过 `qwen-turbo`，重排对照用过 `qwen3-rerank`；2026-10-31 的几项对照用 gpt-4o-mini（经 OpenRouter）做回答模型和筛选器。这些模型只在离线实验中使用，只处理公开数据，不在 Add/Search 路径上。
 
-文本路径的检索和打包配置在 v1.0（早于第一次 Smoke）定下，v1.1、v1.2 没有改动。
+文本路径的检索和打包配置在 v1.0（早于第一次 Smoke）定下，之后的版本没有改动；v1.3 只给返回的窗口加标签。
 
 ## 运行
 
@@ -374,11 +374,12 @@ DASHSCOPE_API_KEY=dummy python tests/test_multimodal_parts.py
 | v1.0.2 | `b933073d2a79fc24e1c71685aac04b51020ab98d` | `v1.0.2` | 未绑定 | 10-31 12:22 – 12:33 | 按赛道分接口。平台不允许，未绑定、未被评测，见下方说明。 |
 | v1.0.3 | `a128e98be8bd57408439800099757a19b0d8c688` | `v1.0.3` | 已绑定，`version_51b3b5e98008`，10-31 12:33 | 10-31 12:33 – 18:28 | 多模态用户返回 ContentPart[]；Search 诊断日志。见下方说明。 |
 | v1.1 | `cf0e917cc1945d43404ac558fc1be651deea9064` | `v1.1` | 已绑定，`version_4aefa3e7a8df`，10-31 18:28 | 10-31 18:28 – 20:05 | 多模态路径、代码路径、文本索引 LRU、日志不含文本。见下方说明。 |
-| v1.2 | `280748c97018cba2ac17c688d8b01973a5677595` | `v1.2` | 已绑定，`version_5b119584e2d5`，10-31 20:05 | 10-31 20:05 起 | 多模态窗口标签，向量费用上限 150 元。见下方说明。 |
+| v1.2 | `280748c97018cba2ac17c688d8b01973a5677595` | `v1.2` | 已绑定，`version_5b119584e2d5`，10-31 20:05 | 10-31 20:05 – v1.3 部署 | 多模态窗口标签，向量费用上限 150 元。见下方说明。 |
+| v1.3 | TBD | `v1.3` | TBD | TBD | 文本窗口标签。见下方说明。 |
 
 已有 tag 不移动。v1.0 没有 tag，以 commit 为准。
 
-所有版本共用同一组接口，同一时刻服务器上只运行一个版本。现在线上只有 v1.2，其他版本都已下线，这些版本名下的 Smoke 只是历史记录。三个赛道的 Full 只用 v1.2 的版本名。
+所有版本共用同一组接口，同一时刻服务器上只运行一个版本。现在线上只有 v1.3，其他版本都已下线，这些版本名下的 Smoke 只是历史记录。三个赛道的 Full 只用 v1.3 的版本名。
 
 **v1.0.2（未绑定）**：曾尝试让三个赛道各用一组接口（`/mm/*`、`/coding/*`）。平台不允许同一个 Key 的不同版本使用不同接口（HTTP 409 "endpoint is immutable for this leaderboard key"），所以这个版本没有绑定。它在服务器上部署过约 11 分钟，这段时间没有任何 Smoke 在运行（此前的代码赛道 Smoke 在 12:20:51 结束，下一次 Smoke 在 v1.0.3 部署后的 12:33:38 开始），没有被评测。
 
@@ -399,6 +400,10 @@ DASHSCOPE_API_KEY=dummy python tests/test_multimodal_parts.py
 - `/health` 不占工作线程，向量接口限流时也能响应。
 - 文本零回归：纯文本用户的每次 Search 响应与 v1.0.3 逐字节一致。测试覆盖默认上限和强制小上限、并发、重启，以及穿插代码用户和图片用户的场景。已知例外两处：`options` 里带孤立代理字符时，v1.0.3 因写日志失败返回 500，v1.1 不再把这段文本写进日志，返回 200；Search 建索引时向量调用失败、平台重试时，v1.0.3 会把新消息在索引里写两遍，v1.1 不会，这次重试的排序可能不同。
 - 测试：`tests/test_lru.py`、`tests/test_logs_v11.py`、`tests/test_multimodal_v11.py`、`tests/test_coding_v11.py`、`tests/test_fixes_v11.py`。
+
+**v1.3**（相对 v1.2）：
+- 文本路径的窗口也加 `<past_conversation index="k">` 标签，窗口内文逐字不变。id、score、顺序不变，Add 不变。代码路径不变，不调用生成式模型。
+- `AML_TEXT_TAG=0` 时不加标签，只用于和旧版本逐字节比较的回归测试。测试：`tests/test_text_tag.py`。
 
 **v1.2**（相对 v1.1）：
 - 多模态文本窗口加 `<past_conversation index="k">` 标签，窗口内文逐字不变。原因：回答模型可能把返回的原始对话当成进行中的聊天，转而回复其中的问题。

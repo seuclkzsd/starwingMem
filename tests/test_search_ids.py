@@ -2,6 +2,7 @@
 
 Run: python tests/test_search_ids.py
 """
+import os as _o; _o.environ.setdefault("AML_TEXT_TAG", "0")     # compares textual bytes with older versions
 import hashlib, os, random, sys, tempfile
 from pathlib import Path
 

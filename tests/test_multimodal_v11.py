@@ -11,6 +11,7 @@
 
 Run: python tests/test_multimodal_v11.py
 """
+import os as _o; _o.environ.setdefault("AML_TEXT_TAG", "0")     # compares textual bytes with older versions
 import base64, hashlib, importlib.util, json, os, random, re, shutil, socket, struct, subprocess, sys, tempfile, threading
 import types, zlib
 from concurrent.futures import ThreadPoolExecutor

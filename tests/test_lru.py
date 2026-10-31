@@ -16,6 +16,7 @@ stub (deterministic embed/rerank, chat raises), every non-local socket connect i
 Run: python tests/test_lru.py [policy equiv stream server concurrency dashscope]   (default: all)
 """
 from __future__ import annotations
+import os as _o; _o.environ.setdefault("AML_TEXT_TAG", "0")     # compares textual bytes with older versions
 
 import ast
 import collections

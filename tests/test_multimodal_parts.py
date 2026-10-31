@@ -3,6 +3,7 @@
 A user whose Add carried content parts gets ContentPart[] back, everyone else gets strings; auth; restart replay.
 Run: python tests/test_multimodal_parts.py
 """
+import os as _o; _o.environ.setdefault("AML_TEXT_TAG", "0")     # compares textual bytes with older versions
 import hashlib, importlib.util, json, os, random, shutil, sys, tempfile
 from pathlib import Path
 

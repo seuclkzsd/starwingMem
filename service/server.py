@@ -57,6 +57,9 @@ DEFAULT_CFG = {"pack": "fill", "budget": 16000, "clean_query": True, "time_boost
                "time_annot": True, "w_session": 0.5, "header_auto": True, "route": {"advice": {"digest_k": 20}},
                "stream_fb": "drop", "max_indexed": 200_000}
 CFG = Config(**{**DEFAULT_CFG, **json.loads(os.environ.get("AML_CFG", "{}"))})
+# v1.3: textual windows carry the same tag as multimodal ones (mmmem.WINDOW), text unchanged. gpt-4o-mini reader, 239 public
+# questions: +3.8 points [0.0,+7.4]; BEAM +7.5, LME +3.7, LoCoMo 0. AML_TEXT_TAG=0 gives the v1.0.3 bytes for regression tests.
+TEXT_TAG = os.environ.get("AML_TEXT_TAG", "1") == "1"
 # v1.1 multimodal path (users whose Adds carried an image_url part; Textual/Coding contracts allow text parts only):
 # clock time kept in window headers (MobileMem: 38% of temporal answers are minutes/hours), 16k of text, images after.
 # 16k from the 300-question local run (MobileMem+MemLens, Qwen3-14B): 24k-16k -0.045 [-0.090,-0.001], 8k-16k +0.014 n.s.
@@ -197,6 +200,8 @@ def search(req: dict = Body(...)):
            "query_images": 0 if isinstance(q, str) else sum(1 for p in q if isinstance(p, dict) and p.get("type") == "image_url"),
            "n": len(data), "chars": sum(len(d["content"]) for d in data), "sec": round(time.time() - t0, 3)}
     log_line(SEARCH_LOG, rec)
+    if TEXT_TAG:
+        data = [{**d, "content": mmmem.WINDOW.format(i=k, t=d["content"])} for k, d in enumerate(data, 1)]
     return JSONResponse({"data": [{"id": d["id"], "content": [{"type": "text", "text": d["content"]}] if mm else d["content"],
                                    "score": d["score"], "created_at": d["created_at"]} for d in data]})
 

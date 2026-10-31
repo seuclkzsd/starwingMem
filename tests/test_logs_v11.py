@@ -8,6 +8,7 @@ message, on any of the three paths. dashscope is the stub of test_multimodal_v11
 
 Run: python tests/test_logs_v11.py
 """
+import os as _o; _o.environ.setdefault("AML_TEXT_TAG", "0")     # compares textual bytes with older versions
 import json, os, re, shutil, subprocess, sys, tempfile
 from hashlib import sha256
 from pathlib import Path

@@ -14,6 +14,7 @@ never loaded, so no key is read), every non-local socket connect is refused and 
 
 Run: python tests/test_coding_v11.py
 """
+import os as _o; _o.environ.setdefault("AML_TEXT_TAG", "0")     # compares textual bytes with older versions
 import ast, itertools, json, os, re, shutil, sqlite3, subprocess, sys, tempfile, threading, time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path

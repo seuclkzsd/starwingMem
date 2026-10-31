@@ -21,6 +21,7 @@ _post, temp HOME and temp cache.
 Run: python tests/test_fixes_v11.py [singleflight http share rebuild room media health feedback]   (default: all)
 """
 from __future__ import annotations
+import os as _o; _o.environ.setdefault("AML_TEXT_TAG", "0")     # compares textual bytes with older versions
 
 import asyncio, base64, collections, hashlib, json, os, random, shutil, struct, subprocess, sys, tempfile, threading, time
 from concurrent.futures import Future, ThreadPoolExecutor
