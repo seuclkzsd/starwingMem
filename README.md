@@ -91,6 +91,14 @@ AML_DB=./data/mem.sqlite AML_CACHE=./cache/emb.sqlite uvicorn server:app --host 
 |---|---|---|
 | v1.0 | `8584168` | 首个版本 |
 | v1.0.1 | tag `v1.0.1` | 修复：建议、偏好类问题的摘要条目与只有一条消息的会话窗口 id 相同，一次 Search 返回了重复 id，平台按接口契约拒收（文本赛道 Smoke 中 scriptmem 1/18 题）。现在摘要条目用 `digest:` 前缀，并保证同一次返回中 id 唯一。检索和打包逻辑不变。回归测试：`tests/test_search_ids.py`。 |
+| v1.0.2 | tag `v1.0.2` | 按赛道分接口；多模态返回 ContentPart[]；Search 诊断日志。见下方"v1.0.2"小节。 |
+
+## 版本记录补充：v1.0.2
+
+- **按赛道分接口**：`/add`、`/search` 是文本赛道，`/mm/add`、`/mm/search` 是多模态赛道，`/coding/add`、`/coding/search` 是代码赛道。每个赛道各有一个独立的存储、配置和 SQLite 文件，数据互不可见。平台发来的 id 都是匿名哈希，看不出请求属于哪个赛道，所以每个赛道在平台上单独绑定一个版本，分别指向自己的接口。文本赛道的处理逻辑与 v1.0.1 完全相同：离线测试中，40 次 Search 的返回逐字节一致。
+- **多模态 Search 返回 ContentPart[]**：接口规范要求多模态的 `content` 是有序的 ContentPart 数组，文本和代码赛道是字符串。v1.0.1 在多模态赛道也返回了字符串，那次多模态 Smoke 13 道题全部 0 分。
+- **Search 诊断日志**：只记录问题（截断到 500 字）、返回条数、字符数和耗时，写在服务器本地。日志属于评测数据，和其他评测数据一样在本期结束后 30 天内删除。
+- 测试：`tests/test_tracks.py`。
 
 ## 许可证
 
