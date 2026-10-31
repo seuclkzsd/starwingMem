@@ -315,6 +315,7 @@ DASHSCOPE_API_KEY=dummy python tests/test_multimodal_parts.py
 - **systemd 服务**：`deploy/starwingmem.service`。服务只监听 127.0.0.1:8000。
 - **HTTPS 前置**：`deploy/Caddyfile`。用 Caddy 申请 Let's Encrypt 的 IP 证书，只把 `/add`、`/search`、`/health` 转发给服务，其他路径一律返回 404。请求体上限 64 MB。客户端访问 IP 地址时不发送 SNI，所以要设置 `default_sni`。
 - **服务器**：阿里云 ECS 杭州，8 vCPU / 14 GB 内存 / 50 GB SSD，Ubuntu 22.04。
+- **超时和限流**：服务端不设请求超时，不主动限流，不返回 429。向量接口单次超时 120 秒，429 和 5xx 退避重试 12 次（合计约 7 分钟），仍失败时返回 500。DashScope 限流 1M TPM。建议并发：Add 16–32（多模态 16），Search 16–32。
 - **费用保护**：`AML_EMB_BUDGET_YUAN` 是向量调用的费用上限。`service/server.py` 的默认值：v1.1 及之前是 65 元，v1.2 起是 150 元。花费累计到上限后，文本和多模态路径上未命中缓存的 Add 和 Search 返回 500；全部命中缓存的请求和代码路径不受影响。
 - **向量接口限流**：DashScope 1M TPM，大批量写入时速度受这个限制。429 退避重试 12 次，仍失败时 Add 返回 500。
 - **内存上限**：文本索引 ≤ 20 万 passage，多模态 ≤ 10 万 passage，代码 ≤ 128 个用户或 6,000 万 BM25 token。都按 LRU 淘汰，淘汰不改变 Search 结果，也不产生向量费用。
