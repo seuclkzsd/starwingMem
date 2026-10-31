@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
+import sys
 import threading
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
@@ -29,6 +30,12 @@ PASSAGE_OVERLAP = 50
 
 def ntok(text: str) -> int:
     return len(ENC.encode(text, disallowed_special=()))
+
+
+def share(s):
+    """One object per distinct string: a history replayed per question (one user each) stays in memory once, not per
+    user. Interned strings go when the last message using them goes. role and session_id may be anything JSON."""
+    return sys.intern(s) if type(s) is str else s
 
 
 def fmt_time(ts_ms: int | None) -> str:
@@ -86,7 +93,7 @@ class Config:
     pin_forget: bool = False      # put the user's verbatim "forget ..." requests first
     forget_suppress: float = 0.0  # >0: drop earlier messages whose similarity to a forgotten item >= this
     pin_system: bool = False      # put system-role messages (profiles, standing instructions) first
-    # ideas borrowed from cycle-1 open-source entries (see cycle1-repos/ANALYSIS)
+    # ideas borrowed from cycle-1 open-source entries (credits in README.md)
     w_session: float = 0.0        # ReFind: RRF term from session-level rank (sum of message scores)
     seed_k: int = 0               # InvMem: only the first seed_k seeds get a +-win window (0 = all)
     session_cap: int = 0          # Chronicle: at most this many seeds per session before others (0 = off)
@@ -119,6 +126,9 @@ class Config:
     route: dict = field(default_factory=dict)  # query type -> Config overrides for that query, e.g.
                                   # {"advice": {"digest_k": 20}}; types from qtype(): advice | count | other
     max_items: int = 100
+    max_indexed: int = 0          # >0: at most this many passages stay indexed over all users; past it the least
+                                  #   recently used idle users lose their index (messages stay) and their next Search
+                                  #   rebuilds it from the embedding cache (same result, no API cost). 0 = no limit
 
 
 @dataclass
@@ -127,6 +137,7 @@ class UserMem:
     seen_requests: set = field(default_factory=set)
     dirty: bool = True
     lock: threading.Lock = field(default_factory=threading.Lock)   # guards msgs and the index of this user only
+    in_use: int = 0                       # Searches in flight (max_indexed: never evicted while > 0)
     # index state
     p_msg: np.ndarray | None = None       # passage -> message idx
     dense: np.ndarray | None = None
@@ -144,13 +155,17 @@ class UserMem:
     rules: list = field(default_factory=list)
 
     def rebuild(self) -> None:
-        """Index msgs[n_indexed:] and append them; the result equals a from-scratch build."""
+        """Index msgs[n_indexed:] and append them; the result equals a from-scratch build. Embedding comes before any
+        state changes: if it raises (a Search then gets a 500), the retry starts over instead of appending msgs twice."""
         new = self.msgs[self.n_indexed:]
         texts, owner = [], []
         for m in new:
             for p in passages(m.content):
                 texts.append(f"{m.role}: {p}")
                 owner.append(m.idx)
+        found = [(m.idx, forget_target(m.content)) for m in new if m.role == "user"]
+        found = [(i, t) for i, t in found if t]
+        forget_vecs = dashscope.embed([t for _, t in self.forgets + found], "query")[0] if found else self.forget_vecs
         if texts or self.dense is None:
             base = len(self.p_owner)
             dense, sparse = dashscope.embed(texts, "document")
@@ -182,14 +197,22 @@ class UserMem:
             for pos, i in enumerate(ids):
                 self.msgs[i].pos = pos
         self.sessions = dict(sessions)
-        found = [(m.idx, forget_target(m.content)) for m in new if m.role == "user"]
-        found = [(i, t) for i, t in found if t]
-        if found:
-            self.forgets += found
-            self.forget_vecs = dashscope.embed([t for _, t in self.forgets], "query")[0]
+        self.forgets += found
+        self.forget_vecs = forget_vecs
         self.rules += [m.idx for m in new if m.role == "user" and len(m.content) < 400 and RULE_RE.search(m.content)]
         self.n_indexed = len(self.msgs)
         self.dirty = False
+
+    def drop_index(self) -> tuple:
+        """Forget everything rebuild() derives from msgs (msgs stay); the next rebuild() starts from scratch, which
+        gives the same index. Returns the old pieces so the caller can free them outside its locks."""
+        old = (self.p_msg, self.dense, self.sparse_inv, self.bm25, self.sessions, self.p_owner, self.p_toks,
+               self.sparse_lists, self.forgets, self.forget_vecs, self.rules)
+        self.p_msg = self.dense = self.sparse_inv = self.bm25 = self.sessions = self.forget_vecs = None
+        self.p_owner, self.p_toks, self.sparse_lists, self.forgets, self.rules = [], [], {}, [], []
+        self.n_indexed = 0
+        self.dirty = True
+        return old
 
 
 NUM = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "few": 3,
@@ -319,10 +342,35 @@ class MemoryStore:
         self.cfg = cfg or Config()
         self.users: dict[str, UserMem] = defaultdict(UserMem)
         self.lock = threading.Lock()
+        self.recent: dict[str, None] = {}   # max_indexed: user ids by last Add/Search, least recent first
+
+    # ------------------------------------------------------------ index LRU
+    def touch(self, user_id: str) -> None:
+        """Mark user_id most recently used; caller holds self.lock."""
+        self.recent[user_id] = self.recent.pop(user_id, None)
+
+    def evict(self) -> None:
+        """Drop the indexes of the least recently used idle users until at most cfg.max_indexed passages stay indexed."""
+        dropped = []
+        with self.lock:
+            total = sum(len(u.p_owner) for u in list(self.users.values()))
+            for uid in list(self.recent):
+                if total <= self.cfg.max_indexed:
+                    break
+                u = self.users.get(uid)
+                if u is None:                         # removed from users by the caller
+                    del self.recent[uid]
+                elif not u.in_use and u.p_owner and u.lock.acquire(blocking=False):   # not busy in Add/rebuild
+                    total -= len(u.p_owner)
+                    dropped.append(u.drop_index())
+                    u.lock.release()
+        del dropped                                   # freed here, outside the store lock
 
     # ------------------------------------------------------------------ add
     def user(self, user_id: str) -> UserMem:
-        with self.lock:            # only guards creating the per-user entry
+        with self.lock:            # only guards creating the per-user entry (and the LRU order)
+            if self.cfg.max_indexed:
+                self.touch(user_id)
             return self.users[user_id]
 
     def add(self, req: dict) -> dict:
@@ -339,8 +387,8 @@ class MemoryStore:
                 content = feedback_view(content, self.cfg.stream_fb)
                 if content is None:
                     continue
-                m = Message(len(user.msgs), req.get("session_id") or "default", msg.get("timestamp"),
-                            msg.get("role", "user"), content, ntok(content))
+                m = Message(len(user.msgs), share(req.get("session_id") or "default"), msg.get("timestamp"),
+                            share(msg.get("role", "user")), share(content), ntok(content))
                 user.msgs.append(m)
             if rid:
                 user.seen_requests.add(rid)
@@ -605,9 +653,24 @@ class MemoryStore:
         user = self.users.get(req["user_id"])
         if user is None or not user.msgs:
             return {"data": []}
+        if not self.cfg.max_indexed:
+            return self.search_user(user, req)
+        with self.lock:
+            self.touch(req["user_id"])
+            user.in_use += 1               # the index is read outside user.lock below
+        try:
+            return self.search_user(user, req)
+        finally:
+            with self.lock:
+                user.in_use -= 1
+
+    def search_user(self, user: UserMem, req: dict) -> dict:
         with user.lock:
+            grew = user.dirty
             if user.dirty:
                 user.rebuild()
+        if grew and self.cfg.max_indexed:
+            self.evict()
         query = req["query"] if isinstance(req["query"], str) else " ".join(
             p.get("text", "") for p in req["query"] if p.get("type") == "text")
         now = parse_now(query)

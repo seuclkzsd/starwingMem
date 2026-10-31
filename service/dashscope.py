@@ -7,7 +7,7 @@ import os
 import sqlite3
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -169,26 +169,54 @@ def _embed_batch(texts: list[str], kind: str) -> list[tuple[np.ndarray, dict]]:
     return out
 
 
+# Concurrent Adds of one text (a persona's history replayed per question, LME-S sessions shared by users) would each
+# miss the cache and each be billed: the first call claims the key, the others take its result or its failure (an Add
+# then gets a 500 and the platform retries; claiming in turn would queue up each owner's ~7 min of 429 backoff).
+# Documents only: a query's first vector is used before its float16 round trip, so queries stay as they were, bytes too.
+_inflight: dict[str, Future] = {}      # cache key -> result of the embed() call billing it now
+_inflight_lock = threading.Lock()
+
+
 def embed(texts: list[str], kind: str = "document", workers: int = 8) -> tuple[np.ndarray, list[dict]]:
     """Return (N x D dense matrix, list of sparse dicts). kind: document | query."""
     # v4 accepts up to 8192 tokens; clip very long inputs by characters as a guard.
     texts = [t[:24000] if t.strip() else "(empty)" for t in texts]
     keys = [CACHE.key(t, kind) for t in texts]
     have = CACHE.get(list(set(keys)))
-    todo = sorted({k: t for k, t in zip(keys, texts) if k not in have}.items())
-    batches = [todo[i:i + 10] for i in range(0, len(todo), 10)]
+    mine = {k: t for k, t in zip(keys, texts) if k not in have}
+    shared, theirs = kind == "document" and bool(mine), {}
+    if shared:
+        with _inflight_lock:
+            theirs = {k: _inflight[k] for k in mine if k in _inflight}
+            mine = {k: t for k, t in mine.items() if k not in theirs}
+            _inflight.update((k, Future()) for k in mine)
 
     def run(batch):
         res = _embed_batch([t for _, t in batch], kind)
         rows = [(k, d, s) for (k, _), (d, s) in zip(batch, res)]
         CACHE.put(rows)
-        return rows
+        have.update((k, (d, s)) for k, d, s in rows)
 
-    if batches:
-        with ThreadPoolExecutor(workers) as ex:
-            for rows in ex.map(run, batches):
-                for k, d, s in rows:
-                    have[k] = (d, s)
+    err = None
+    try:
+        if shared:
+            have.update(CACHE.get(list(mine)))     # the last owner may have finished since the first read
+        todo = sorted((k, t) for k, t in mine.items() if k not in have)
+        batches = [todo[i:i + 10] for i in range(0, len(todo), 10)]
+        if batches:
+            with ThreadPoolExecutor(workers) as ex:
+                list(ex.map(run, batches))
+    except BaseException as e:
+        err = e
+        raise
+    finally:                                       # every claim is settled, also those of batches ex.map cancelled
+        if shared:
+            with _inflight_lock:
+                claimed = {k: _inflight.pop(k) for k in mine}
+            for k, f in claimed.items():
+                f.set_result(have[k]) if k in have else f.set_exception(err or KeyError(k))
+    for k, f in theirs.items():                    # after our own claims: nobody waits on us while we wait
+        have[k] = f.result()
     dense = np.stack([have[k][0] for k in keys]) if keys else np.zeros((0, EMB_DIM), np.float32)
     return dense, [have[k][1] for k in keys]
 
