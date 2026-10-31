@@ -85,6 +85,13 @@ AML_DB=./data/mem.sqlite AML_CACHE=./cache/emb.sqlite uvicorn server:app --host 
 
 评测数据只用于完成本期评测，不用于训练，评测结束后 30 天内删除。
 
+## 版本记录
+
+| 版本 | commit / tag | 改动 |
+|---|---|---|
+| v1.0 | `8584168` | 首个版本 |
+| v1.0.1 | tag `v1.0.1` | 修复：建议、偏好类问题的摘要条目与只有一条消息的会话窗口 id 相同，一次 Search 返回了重复 id，平台按接口契约拒收（文本赛道 Smoke 中 scriptmem 1/18 题）。现在摘要条目用 `digest:` 前缀，并保证同一次返回中 id 唯一。检索和打包逻辑不变。回归测试：`tests/test_search_ids.py`。 |
+
 ## 许可证
 
 MIT，见 `LICENSE`。

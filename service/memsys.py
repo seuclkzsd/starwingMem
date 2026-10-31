@@ -664,11 +664,17 @@ class MemoryStore:
         packed = self.pack(user, order, exclude=drop, budget=budget, now=now)
         if self.cfg.order_time or whole:
             packed.sort(key=lambda it: (user.msgs[user.sessions[it["sid"]][it["lo"]]].ts or 0, it["sid"], it["lo"]))
+        for it in pin_items:                  # a pinned item can cover the same span as a packed window
+            it["kind"] = "digest:" if it.get("ids") else "pin:"
         items = (pin_items + packed)[:top_k]
-        data = []
+        data, seen = [], set()
         for rank, it in enumerate(items):
             ids = it.get("ids") or user.sessions[it["sid"]][it["lo"]:it["hi"] + 1]
-            data.append({"id": f"{it['sid']}#{it['lo']}-{it['hi']}", "content": it["text"],
+            rid = f"{it.get('kind', '')}{it['sid']}#{it['lo']}-{it['hi']}"
+            if rid in seen:                   # the platform rejects a response with duplicate ids
+                rid = f"{rid}~{rank}"
+            seen.add(rid)
+            data.append({"id": rid, "content": it["text"],
                          "score": 1.0 / (rank + 1), "msg_ids": ids,
                          "created_at": iso_time(user.msgs[ids[0]].ts)})
         return {"data": data}
