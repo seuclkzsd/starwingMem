@@ -1,6 +1,6 @@
 # starwingMem
 
-starwingMem is a long-term memory service for the Agent Memory Challenge 2026 (Cycle 2, Open-source Methods division), entered in the Textual, Coding and Multimodal tracks. It implements the AML Add / Search contract: Add stores what the platform sends, and Search returns verbatim history to the platform's fixed answer model, with dates resolved. **gpt-4o-mini: N/A.** No generative model is called at Add or Search time in any version (v1.0–v1.1). The only model is `text-embedding-v4`, on the textual and multimodal paths; the v1.1 coding path uses BM25 and rules only. Images are stored and returned as they are and are never interpreted.
+starwingMem is a long-term memory service for the Agent Memory Challenge 2026 (Cycle 2, Open-source Methods division), entered in the Textual, Coding and Multimodal tracks. It implements the AML Add / Search contract: Add stores what the platform sends, and Search returns verbatim history to the platform's fixed answer model, with dates resolved. **gpt-4o-mini: N/A.** No generative model is called at Add or Search time in any version (v1.0–v1.2). The only model is `text-embedding-v4`, on the textual and multimodal paths; the v1.1 coding path uses BM25 and rules only. Images are stored and returned as they are and are never interpreted.
 
 starwingMem 是为第二届 Agent 记忆挑战赛（开源方法榜）实现的记忆服务，参加文本、代码、多模态三个赛道。它只负责 Add / Search：原样保存平台写入的内容，检索时返回带日期标注的原始历史片段，最终答案由平台统一生成。
 
@@ -137,7 +137,7 @@ starwingMem 是为第二届 Agent 记忆挑战赛（开源方法榜）实现的�
 | query 里的图片 | 忽略 | 忽略 | 不做视觉检索。图片用户的 query 图片只算 sha256，如果和该用户发过的图片完全相同，就把对应消息排到最前；不保存。无图片用户走文本路径，query 图片忽略 |
 | 是否返回图片证据 | 否。`content` 是字符串 | 否。`content` 是只含 text 的 ContentPart[] | 是。命中窗口里的原图随结果原样返回（base64 data URI，不缩放、不重新编码），上限见上文 |
 
-Multimodal declaration in English. v1.0 and v1.0.1 are caption-only and return strings. v1.0.3 is caption-only and returns ContentPart[] with text parts only. In these versions images are not processed: no OCR, no vision or caption model; only text parts, including the platform's captions, are indexed and searched; query images are ignored; no image evidence is returned; the raw request, base64 included, stays in SQLite for idempotency and replay only. v1.1 stores the original images and returns the images of the retrieved windows unchanged with the Search results. It does not interpret images: no OCR, no vision or caption model, no multimodal embedding, and pixels are never decoded (only file headers are read, for MIME type and size). Retrieval uses text and captions only. A query image is used only for an exact SHA-256 match against that user's own images and is not stored.
+Multimodal declaration in English. v1.0 and v1.0.1 are caption-only and return strings. v1.0.3 is caption-only and returns ContentPart[] with text parts only. In these versions images are not processed: no OCR, no vision or caption model; only text parts, including the platform's captions, are indexed and searched; query images are ignored; no image evidence is returned; the raw request, base64 included, stays in SQLite for idempotency and replay only. v1.1 and v1.2 store the original images and returns the images of the retrieved windows unchanged with the Search results. It does not interpret images: no OCR, no vision or caption model, no multimodal embedding, and pixels are never decoded (only file headers are read, for MIME type and size). Retrieval uses text and captions only. A query image is used only for an exact SHA-256 match against that user's own images and is not stored.
 
 ## 原始工作与改动披露
 
@@ -185,7 +185,7 @@ Multimodal declaration in English. v1.0 and v1.0.1 are caption-only and return s
 
 | 字段 | 内容 |
 |---|---|
-| 原作者 | GitHub 账号 `wenxiaof345-ctrl`。 |
+| 原作者 | 忆构智能团队（房文晓、武志妍、李星璇、刘昱浩，按 AML 官方解读文章），GitHub 账号 `wenxiaof345-ctrl`。 |
 | 技术报告 | 无。 |
 | 原仓库与许可证 | https://github.com/wenxiaof345-ctrl/vanilla-rag-memory ，无 LICENSE 文件（本地克隆 `31ab7bf` 和 2026-10-31 的 GitHub 页面都没有）。 |
 | 保留的部分 | 思路：只给排名靠前的种子扩展邻居窗口。 |
@@ -375,9 +375,9 @@ DASHSCOPE_API_KEY=dummy python tests/test_multimodal_parts.py
 
 已有 tag 不移动。v1.0 没有 tag，以 commit 为准。
 
-所有版本共用同一组接口，同一时刻服务器上只运行一个版本。v1.0、v1.0.1 已下线，这些版本名下的 Smoke 只是历史记录。三个赛道的 Full 只用 v1.1 的版本名。
+所有版本共用同一组接口，同一时刻服务器上只运行一个版本。现在线上只有 v1.2，其他版本都已下线，这些版本名下的 Smoke 只是历史记录。三个赛道的 Full 只用 v1.2 的版本名。
 
-**v1.0.2（未绑定）**：曾尝试让三个赛道各用一组接口（`/mm/*`、`/coding/*`）。平台不允许同一个 Key 的不同版本使用不同接口（HTTP 409 "endpoint is immutable for this leaderboard key"），所以这个版本没有绑定。它在服务器上部署过 10 分钟，这段时间没有任何 Smoke 在运行（此前的代码赛道 Smoke 在 12:20:51 结束，下一次 Smoke 在 v1.0.3 部署后的 12:33:38 开始），没有被评测。
+**v1.0.2（未绑定）**：曾尝试让三个赛道各用一组接口（`/mm/*`、`/coding/*`）。平台不允许同一个 Key 的不同版本使用不同接口（HTTP 409 "endpoint is immutable for this leaderboard key"），所以这个版本没有绑定。它在服务器上部署过约 11 分钟，这段时间没有任何 Smoke 在运行（此前的代码赛道 Smoke 在 12:20:51 结束，下一次 Smoke 在 v1.0.3 部署后的 12:33:38 开始），没有被评测。
 
 **v1.0.3**：
 - 三个赛道共用 `/add`、`/search`。平台发来的 id 都是匿名哈希，所以按内容形态区分：某个用户的 Add 里只要出现过 content 数组（多模态赛道的图文混排），这个用户的 Search 结果就按接口规范返回有序的 ContentPart[]，其中只有 text，不含图片；其他用户仍返回字符串。v1.0.1 在多模态赛道也返回字符串，那次多模态 Smoke 13 道题全部 0 分。
