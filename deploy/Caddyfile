@@ -15,7 +15,7 @@ https://203.0.113.10 {
 	request_body {
 		max_size 64MB
 	}
-	@api path /add /search /health /mm/add /mm/search /mm/health /coding/add /coding/search /coding/health
+	@api path /add /search /health
 	handle @api {
 		reverse_proxy 127.0.0.1:8000
 	}

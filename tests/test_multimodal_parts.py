@@ -1,7 +1,7 @@
-"""Offline check of per-track routing (no network: embed() is stubbed).
+"""Offline check of multimodal handling (no network: embed() is stubbed).
 
-Tracks are isolated, /mm returns ContentPart[], every prefix has auth and health, and a restart replays the stores.
-Run: python tests/test_tracks.py
+A user whose Add carried content parts gets ContentPart[] back, everyone else gets strings; auth; restart replay.
+Run: python tests/test_multimodal_parts.py
 """
 import hashlib, importlib.util, json, os, random, shutil, sys, tempfile
 from pathlib import Path
@@ -65,27 +65,22 @@ def run(client, prefix=""):
 
 new_c, new_m = load(os.path.join(svc, "server.py"), "server_new", f"{work}/new/mem.sqlite")
 got = run(new_c)
-assert all(isinstance(d["content"], str) for r in got for d in r["data"]), "textual content must be strings"
 print("textual: %d searches ok" % len(got))
 
-for p in ("/mm", "/coding"):
-    assert new_c.post(p + "/search", json={"query": "coffee", "user_id": "u0"}, headers=H).json() == {"data": []}, p + " sees textual data"
-    assert new_c.post(p + "/add", json=adds[0]).status_code == 401
-    assert new_c.get(p + "/health").json() == {"status": "ok"}
-mm = {"request_id": "m1", "user_id": "mu", "session_id": "ms", "messages": [{"role": "user", "content": [
-    {"type": "text", "text": "Alex: this is the Ethos Water piece.\nImage Caption: a bottle pours a heart"},
-    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,/9j/4AAQ"}}]}]}
-assert new_c.post("/mm/add", json=mm, headers=H).status_code == 200
-r = new_c.post("/mm/search", json={"query": [{"type": "text", "text": "Which water brand?"}], "user_id": "mu", "top_k": 5}, headers=H).json()
+mm = {"request_id": "m1", "user_id": "mu", "session_id": "ms", "messages": [
+    {"role": "user", "content": "Alex: switching to Starbucks."},
+    {"role": "user", "content": [
+        {"type": "text", "text": "Alex: this is the Ethos Water piece.\nImage Caption: a bottle pours a heart"},
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,/9j/4AAQ"}}]}]}
+assert new_c.post("/add", json=mm, headers=H).status_code == 200
+r = new_c.post("/search", json={"query": [{"type": "text", "text": "Which water brand?"}], "user_id": "mu", "top_k": 5}, headers=H).json()
 c0 = r["data"][0]["content"]
-assert isinstance(c0, list) and c0[0]["type"] == "text" and "Ethos" in c0[0]["text"], r      # ContentPart[] on /mm
-assert new_c.post("/search", json={"query": "Ethos", "user_id": "mu"}, headers=H).json() == {"data": []}, "textual sees mm data"
-assert new_c.post("/coding/search", json={"query": "Ethos", "user_id": "mu"}, headers=H).json() == {"data": []}
-print("tracks isolated; auth and health on every prefix")
-print("db files:", sorted(os.listdir(f"{work}/new")))
-
+assert isinstance(c0, list) and c0[0]["type"] == "text" and "Ethos" in c0[0]["text"], r      # ContentPart[] for mm users
+assert all(isinstance(d["content"], str) for x in got for d in x["data"]), "textual users must get strings"
+assert new_c.post("/add", json=adds[0]).status_code == 401
+print("multimodal user gets ContentPart[]; textual users get strings; auth ok")
 again_c, _ = load(os.path.join(svc, "server.py"), "server_new2", f"{work}/new/mem.sqlite")   # restart: replay
-r2 = again_c.post("/mm/search", json={"query": [{"type": "text", "text": "Which water brand?"}], "user_id": "mu", "top_k": 5}, headers=H).json()
+r2 = again_c.post("/search", json={"query": [{"type": "text", "text": "Which water brand?"}], "user_id": "mu", "top_k": 5}, headers=H).json()
 assert r2 == r, "mm replay differs"
-assert again_c.post("/search", json={"query": queries[0], "user_id": "u0", "top_k": 100}, headers=H).json() == got[0 * 10 + 1]
+assert again_c.post("/search", json={"query": queries[0], "user_id": "u0", "top_k": 100}, headers=H).json() == got[1]
 print("restart replay: identical")
