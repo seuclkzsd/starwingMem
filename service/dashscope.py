@@ -177,6 +177,15 @@ _inflight: dict[str, Future] = {}      # cache key -> result of the embed() call
 _inflight_lock = threading.Lock()
 
 
+def _embed_clipped(text: str, kind: str):
+    for n in (len(text), 16000, 8000, 4000):
+        try:
+            return _embed_batch([text[:n]], kind)[0]
+        except RuntimeError as e:
+            if "Range of input length" not in str(e) or n == 4000:
+                raise
+
+
 def embed(texts: list[str], kind: str = "document", workers: int = 8) -> tuple[np.ndarray, list[dict]]:
     """Return (N x D dense matrix, list of sparse dicts). kind: document | query."""
     # v4 accepts up to 8192 tokens; clip very long inputs by characters as a guard.
@@ -192,7 +201,12 @@ def embed(texts: list[str], kind: str = "document", workers: int = 8) -> tuple[n
             _inflight.update((k, Future()) for k in mine)
 
     def run(batch):
-        res = _embed_batch([t for _, t in batch], kind)
+        try:
+            res = _embed_batch([t for _, t in batch], kind)
+        except RuntimeError as e:      # DashScope refuses inputs over 16,000: only those are clipped, one by one
+            if "Range of input length" not in str(e):
+                raise
+            res = [_embed_clipped(t, kind) for _, t in batch]
         rows = [(k, d, s) for (k, _), (d, s) in zip(batch, res)]
         CACHE.put(rows)
         have.update((k, (d, s)) for k, d, s in rows)
